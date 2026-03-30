@@ -42,6 +42,7 @@ dashboard/
 | Campaign ID | Description |
 |-------------|-------------|
 | `slv`       | Salt Lake Valley campaign (Winter 2026) |
+| `arc`       | Utah Summer Ozone Study (USOS) (Summer 2026) from the Air Resources Car (ARC) |
 
 ---
 
