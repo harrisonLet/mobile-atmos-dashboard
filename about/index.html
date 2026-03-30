@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>About - Mobile Atmos Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --panel: #121826;
+      --panel-alt: #0f1422;
+      --border: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    /* Nav — exact match */
+    nav {
+      background: #020617;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      height: 56px;
+    }
+    .nav-container {
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      height: 56px;
+    }
+    .nav-brand {
+      color: var(--text);
+      font-size: 1.05rem;
+      font-weight: 600;
+      padding: 10px 12px;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .nav-logo { height: 28px; }
+    .nav-menu { display: flex; list-style: none; margin-left: auto; align-items: center; }
+    .nav-link {
+      color: var(--muted);
+      text-decoration: none;
+      padding: 10px 14px;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      height: 56px;
+    }
+    .nav-link:hover { color: var(--text); background: var(--panel-alt); }
+    .nav-link.active { color: var(--accent); }
+
+    /* Page */
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin: 36px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    p {
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-bottom: 12px;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    ul {
+      color: var(--muted);
+      font-size: 0.92rem;
+      padding-left: 20px;
+      margin-bottom: 12px;
+    }
+    ul li { margin-bottom: 5px; }
+
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.85rem;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 1px 6px;
+      border-radius: 3px;
+      color: var(--text);
+    }
+
+    pre {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 14px 16px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.82rem;
+      color: var(--text);
+      overflow-x: auto;
+      margin-bottom: 12px;
+      line-height: 1.65;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin-bottom: 12px;
+    }
+    th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 500;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel-alt);
+    }
+    td {
+      padding: 7px 12px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    td:first-child {
+      color: var(--text);
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.82rem;
+    }
+    tr:last-child td { border-bottom: none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-container">
+    <a href="/~u1460207/dashboard/" class="nav-brand">
+      <img src="/~u1460207/src/BlockU_RGB.png" alt="University of Utah" class="nav-logo">
+      Mobile Atmos Dashboard
+    </a>
+    <ul class="nav-menu">
+      <li><a href="/~u1460207/dashboard/" class="nav-link">Home</a></li>
+      <li><a href="/~u1460207/dashboard/viewer/" class="nav-link">Map Viewer</a></li>
+      <li><a href="/~u1460207/dashboard/analysis/" class="nav-link">Analysis</a></li>
+      <li><a href="/~u1460207/dashboard/about/" class="nav-link">About</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="page">
+
+  <h1>Mobile Atmos Dashboard</h1>
+  <p>
+    A web-based dashboard for visualizing mobile atmospheric field measurements.
+    Built at the University of Utah's Land-Atmosphere Interactions Research Group.
+  </p>
+
+  <h2>Using the Dashboard</h2>
+  <p>No installation required — the dashboard runs in your browser. Currently hosted at <a href="https://home.chpc.utah.edu/~u1460207/dashboard/" target="_blank">home.chpc.utah.edu/~u1460207/dashboard/</a></p>
+  <ul>
+    <li>
+      <strong style="color:var(--text)">Map Viewer</strong> — Select a campaign and date
+      to view the GPS-tracked measurement route on an interactive map.
+    </li>
+    <li>
+      <strong style="color:var(--text)">Analysis</strong>
+    
+      <p>1. Select a campaign and date to view time series plot, gps track, and analysis plots for the full day's measurements.</p>
+      <p>2. Use Plotly's built-in tools to zoom, pan, and scale data ranges on the time series plot (top right).</p>
+      <p>3. Use the select tool to select a horizontal range of data to update the supporting plots.</p>
+    </li>
+  </ul>
+  <p>Use the Campaign and Date dropdowns in the nav bar to switch between datasets on any page.</p>
+
+  <h2>Data Format</h2>
+  <p>Data is organized under <code>data/</code> by campaign ID and date:</p>
+  <pre>data/
+└── &lt;campaign&gt;/
+    └── YYYYMMDD/
+        ├── YYYYMMDD.csv
+        └── YYYYMMDD_map.html</pre>
+
+
+  <h2>Hosting or Adding Data</h2>
+  <p>The dashboard is static HTML — no server-side code is required. It can be hosted on any web server that serves static files.</p>
+
+  <h2>Source Code</h2>
+  <p>
+    Source code is available on GitHub:
+    <a href="https://github.com/harrisonLet/mobile-atmos-dashboard" target="_blank">
+      github.com/harrisonLet/mobile-atmos-dashboard
+    </a>.
+  </p>
+  <p>
+    For issues or questions about the code, open an issue on the repository or email me directly.
+  </p>
+
+  <h2>Contact &amp; Citation</h2>
+  <p>
+    <strong style="color:var(--text)">Harrison LeTourneau</strong><br>
+    Land-Atmosphere Interactions Research Group, University of Utah<br>
+    <a href="mailto:harrison.letourneau@gmail.com">harrison.letourneau@gmail.com</a>
+  </p>
+  <p>To cite this dashboard in published work:</p>
+  <pre>LeTourneau, H. (2025). Mobile Atmos Dashboard. University of Utah,
+Land-Atmosphere Interactions Research Group. Presented at the
+Science for Solutions Conference.</pre>
+
+</div>
+</body>
+</html>

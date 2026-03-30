@@ -1,0 +1,18 @@
+# OS / editor artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+data_format.md
+
+
+# Large or sensitive data
+# add data dirs here to keep them out of the repo if needed
+data/arc/
+data/slv/
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile Atmos Dashboard</title>
+    <style>
+ :root {
+    --bg: #0b0e14;
+    --panel: #121826;
+    --panel-alt: #0f1422;
+    --border: #1f2937;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --accent: #60a5fa;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+    color: var(--text);
+    background: var(--bg);
+}
+
+/* Navigation */
+nav {
+    background: #020617;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.nav-container {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+}
+
+.nav-brand {
+    color: var(--text);
+    font-size: 1.05rem;
+    font-weight: 600;
+    padding: 10px 12px;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.nav-logo {
+    height: 28px;
+}
+
+.nav-menu {
+    display: flex;
+    list-style: none;
+    margin-left: auto;
+}
+
+.nav-link {
+    color: var(--muted);
+    text-decoration: none;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+}
+
+.nav-link:hover {
+    color: var(--text);
+    background: var(--panel-alt);
+}
+
+/* Layout */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+header {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 24px;
+    margin-bottom: 20px;
+}
+
+h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.subtitle {
+    margin-top: 6px;
+    font-size: 0.95rem;
+    color: var(--muted);
+}
+
+section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 22px;
+    margin-bottom: 20px;
+}
+
+h2 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* Campaign grid */
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.card {
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    padding: 18px;
+}
+
+.card h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.card p {
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin-bottom: 14px;
+}
+
+/* Buttons */
+.button-group {
+    display: flex;
+    gap: 10px;
+}
+
+.btn {
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    border-radius: 3px;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: transparent;
+}
+
+.btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+
+.btn-primary {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.btn-primary:hover {
+    background: var(--accent);
+    color: #020617;
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    color: var(--muted);
+    margin-top: 30px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    font-size: 0.85rem;
+}
+</style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="/~u1460207" class="nav-brand">
+                <img src="/~u1460207/src/BlockU_RGB.png" alt="University of Utah" class="nav-logo">
+                Mobile Atmos Dashboard
+            </a>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="/~u1460207/dashboard/" class="nav-link">Home</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/~u1460207/dashboard/viewer/" class="nav-link">Map Viewer</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/~u1460207/dashboard/analysis/" class="nav-link">Analysis</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/~u1460207/dashboard/about/" class="nav-link">About</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <header>
+            <h1>Mobile Atmos Dashboard</h1>
+            <p class="subtitle">University of Utah | Department of Atmospheric Science | LAIR </p>
+        </header>
+
+        <section>
+            <h2>Field Deployments</h2>
+            <div class="card-grid">
+                <div class="card">
+                    <h3>Salt Lake Valley Methane Study</h3>
+                    <p>Methane focused deployment of University of Wyoming Mobile Air Quality Lab in Winter 2026.</p>
+                    <div class="button-group">
+                        <a href="/~u1460207/dashboard/viewer/?campaign=slv" class="btn btn-primary">View Maps</a>
+                        <a href="/~u1460207/dashboard/analysis/?campaign=slv" class="btn btn-secondary">Analyze Data</a>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>ARC</h3>
+                    <p>NOAA's Air Resources Car, part of USOS 2024.</p>
+                    <div class="button-group">
+                        <a href="/~u1460207/dashboard/viewer/?campaign=arc" class="btn btn-primary">View Maps</a>
+                        <a href="/~u1460207/dashboard/analysis/?campaign=arc" class="btn btn-secondary">Analyze Data</a>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>SLC-SOS</h3>
+                    <p>Ozone focused deployment of University of Wyoming Mobile Air Quality Lab in Summer 2025.</p>
+                    <div class="button-group">
+                        <a href="/~u1460207/dashboard/viewer/?campaign=slc-sos" class="btn btn-primary">View Maps</a>
+                        <a href="/~u1460207/dashboard/analysis/?campaign=slc-sos" class="btn btn-secondary">Analyze Data</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Resources</h2>
+            <p>Access comprehensive documentation, source code, and analysis tools for mobile methane research.</p>
+            <ul style="list-style: none; padding: 0;">
+                <li style="padding: 8px 0;">
+                    <a href="https://github.com/harrisonLet/slv_methane_study" target="_blank" style="color: #3498db; text-decoration: none;">
+                        GitHub Repository
+                    </a> - Software package for data compilation and processing
+                </li>
+            </ul>
+        </section>
+
+        <img 
+            src="/~u1460207/src/uwyo_van.jpeg" 
+            style="width: 100%; height: auto;"
+            alt="Project photo" 
+            class="hero-image"
+        >
+
+        <footer>
+            <p>&copy; 2026 Harrison LeTourneau | Hosted on CHPC</p>
+        </footer>
+    </div>
+</body>
+</html>
