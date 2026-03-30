@@ -343,7 +343,7 @@ function plotTimeSeries() {
         type: "scattergl",
         mode: "lines+markers",
         marker: { size: 2, opacity: 0 },
-        line: { width: 1.5, color: '#1f77b4' },
+        line: { width: 1.5, color: '#ff3dff' },
         name: "CH₄ (ppm)",
         yaxis: 'y'
     };
@@ -377,9 +377,9 @@ function plotTimeSeries() {
         yaxis: {
             title: {
                 text: "CH₄ (ppm)",
-                font: { color: "#60a5fa" }
+                font: { color: "#ff3dff" }
             },
-            tickfont: { color: "#60a5fa" },
+            tickfont: { color: "#ff3dff" },
             gridcolor: "#1f2937",
             zerolinecolor: "#1f2937"
         },
@@ -458,7 +458,7 @@ function plotCH4Ethane(data) {
             x: x,
             y: yFit,
             mode: "lines",
-            line: { color: "#60a5fa", width: 2 },
+            line: { color: "#ff3dff  ", width: 2 },
             name: "Regression",
             hoverinfo: "none",
         };
@@ -477,7 +477,7 @@ function plotCH4Ethane(data) {
                 family: 'monospace'
             },
             bgcolor: 'rgba(18, 24, 38, 0.8)',
-            bordercolor: '#60a5fa',
+            bordercolor: '#FFFFFF',
             borderwidth: 1,
             borderpad: 8,
             align: 'left'
@@ -714,17 +714,26 @@ function plotSelectionMap(data) {
         .sort((a, b) => new Date(a.time) - new Date(b.time))
         .map(d => [d.lat, d.lon]);
     if (pathCoords.length > 0) {
-        selectionPolyline = L.polyline(pathCoords, { color: '#CFFF04', weight: 3, opacity: 0.85 });
-        selectionPolyline.addTo(selectionMap);
-
-        // Fit to polyline bounds if possible
+        // Dark halo underneath for contrast against any tile background
+        polylineOutline = L.polyline(pathCoords, {
+            color: '#000000',
+            weight: 6,
+            opacity: 0.45
+        }).addTo(selectionMap);
+ 
+        // Colored line on top
+        selectionPolyline = L.polyline(pathCoords, {
+            color: '#00d4ff    ',
+            weight: 3,
+            opacity: 0.9
+        }).addTo(selectionMap);
+ 
         try {
             const polyBounds = selectionPolyline.getBounds();
             if (polyBounds.isValid()) {
                 selectionMap.fitBounds(polyBounds, { padding: [50, 50] });
             }
         } catch (err) {
-            // Fallback to start/end bounds
             const bounds = L.latLngBounds([
                 [startPoint.lat, startPoint.lon],
                 [endPoint.lat, endPoint.lon]
