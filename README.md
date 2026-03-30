@@ -77,13 +77,13 @@ For your own use, or to request that data might be added to the dashboard hosted
 
 ---
 
-## Citation
+<!-- ## Citation
 
 If you use this dashboard or the data it presents in your work, please cite:
 
 > LeTourneau, H. (2025). *Mobile Atmos Dashboard*. University of Utah, Land-Atmosphere Interactions Research Group.
 
----
+--- -->
 
 ## Contact
 
