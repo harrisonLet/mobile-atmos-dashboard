@@ -49,10 +49,6 @@ nav {
     padding: 0 12px;
 }
 
-    /* .js-plotly-plot {
-        outline: 2px solid red;
-    } */
-
 /* Ensure consistent nav height and vertical centering */
 nav { height: 56px; }
 .nav-container { height: 56px; }
@@ -89,7 +85,6 @@ nav { height: 56px; }
 .selector-group { display: flex; align-items: center; gap: 8px; }
 .selector-group label { color: var(--muted); font-size: 0.85rem; font-weight: 500; margin-right: 6px; }
 .selector-group select {
-    /* Match button sizing and tone; use explicit height to avoid taller selects */
     padding: 4px 12px;
     font-size: 0.85rem;
     line-height: normal;
@@ -105,7 +100,7 @@ nav { height: 56px; }
 .main-grid { display: flex; height: 47.5vh; gap: 5px; padding: 5px; }
 .bottom-grid { display: flex; height: 47.5vh; gap: 5px; padding: 5px; }
 
-.bottom-grid .panel > div {
+.bottom-grid .panel > .chart-container {
     flex: 1;
     min-height: 0;
     height: 100%;
@@ -122,11 +117,30 @@ nav { height: 56px; }
 .main-grid > .panel:nth-child(2) { /* time series slightly larger */
     flex: 1.1;
 }
-/* Make the ethane vs methane plot slightly larger than the wind rose */
+/* Make the ratio plot slightly larger than the wind rose */
 .bottom-grid > .panel:first-child { flex: 1.4; }
 .bottom-grid > .panel:nth-child(2) { flex: 0.6; }
 .panel h2 { margin: 0 0 6px 0; font-size: 0.95rem; color: var(--text); }
-.panel iframe, .panel > div { flex: 1; width: 100%; }
+.panel iframe, .panel > .chart-container { flex: 1; min-height: 0; width: 100%; }
+
+/* Panel-level column selectors */
+.panel-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 0 5px 0;
+    flex: 0 0 auto;
+}
+.panel-controls .selector-group label {
+    font-size: 0.78rem;
+    margin-right: 3px;
+}
+.panel-controls .selector-group select {
+    height: 26px;
+    padding: 2px 8px;
+    font-size: 0.78rem;
+    max-width: 160px;
+}
 
 .plotly-dark { background-color: var(--panel); color: var(--text); }
 
@@ -183,29 +197,54 @@ nav { height: 56px; }
 
 <div class="main-grid">
 
-
     <div class="panel">
-        <div id="selectionMap"></div>
+        <div id="selectionMap" class="chart-container"></div>
     </div>
 
     <div class="panel">
-        <div id="timeSeries"></div>
+        <div class="panel-controls">
+            <div class="selector-group">
+                <label for="tsCol1">Left:</label>
+                <select id="tsCol1"></select>
+            </div>
+            <div class="selector-group">
+                <label for="tsCol2">Right:</label>
+                <select id="tsCol2"></select>
+            </div>
+        </div>
+        <div id="timeSeries" class="chart-container"></div>
     </div>
 </div>
 
 <div class="bottom-grid">
 
-
     <div class="panel">
-        <div id="ch4Ethane"></div>
+        <div class="panel-controls">
+            <div class="selector-group">
+                <label for="ratioX">X:</label>
+                <select id="ratioX"></select>
+            </div>
+            <div class="selector-group">
+                <label for="ratioY">Y:</label>
+                <select id="ratioY"></select>
+            </div>
+        </div>
+        <div id="ch4Ethane" class="chart-container"></div>
     </div>
 
     <div class="panel">
-        <div id="windRose"></div>
+        <div id="windRose" class="chart-container"></div>
     </div>
 </div>
 
 <script>
+
+// Met columns to exclude from species detection
+const MET_COLS = new Set([
+    'TIMESTAMP', 'LAT_Sprinter', 'LON_Sprinter',
+    'TEMP_C_Sprinter', 'RH_Sprinter', 'WIND_DIR_Sprinter',
+    'WIND_SPEED_Sprinter', 'PRESSURE_Sprinter'
+]);
 
 // Campaign date configurations
 const datesByCampaign= {
@@ -248,6 +287,7 @@ const datesByCampaign= {
 };
 
 let currentData = [];
+let speciesColumns = [];
 let selectionMap = null;
 let startMarker = null;
 let endMarker = null;
@@ -256,6 +296,10 @@ let selectionPolyline = null;
 
 const campaignSelect = document.getElementById('campaignSelect');
 const dateSelect = document.getElementById('dateSelect');
+const tsCol1Select = document.getElementById('tsCol1');
+const tsCol2Select = document.getElementById('tsCol2');
+const ratioXSelect = document.getElementById('ratioX');
+const ratioYSelect = document.getElementById('ratioY');
 
 
 // Get URL parameters
@@ -275,6 +319,11 @@ dateSelect.addEventListener('change', e => {
     console.log('dateSelect changed:', e.target.value);
     loadDate();
 });
+
+tsCol1Select.addEventListener('change', plotTimeSeries);
+tsCol2Select.addEventListener('change', plotTimeSeries);
+ratioXSelect.addEventListener('change', () => plotCH4Ethane(currentData));
+ratioYSelect.addEventListener('change', () => plotCH4Ethane(currentData));
 
 function getPaths() {
     return {
@@ -306,27 +355,27 @@ function loadDate() {
 function parseData(rows) {
     console.log("Raw rows received:", rows.length);
     console.log("First row:", rows[0]);
-    
+
+    if (!rows.length) return;
+
+    // Detect species columns from the first row's keys
+    const allCols = Object.keys(rows[0]);
+    speciesColumns = allCols.filter(c => !MET_COLS.has(c));
+    console.log("Species columns detected:", speciesColumns);
+
     currentData = rows.map(r => ({
         time: new Date(r["TIMESTAMP"]),
-        ch4: r["CH4 (ppm)"],
-        c2h6: r["C2H6 (ppb)"],
-        windDir: r["GPSCorWindDirTrue (deg)"] ?? r["Wind Direction (Deg True)"],
-        windSpeed: r["GPSCorWindSpeed (m/s)"] ?? r["Wind Speed (m/s)"],
-        lat: r["Latitude (DD.ddd +N)"],
-        lon: r["Longitude (DDD.ddd -W)"]
-    }))
-    .filter(d => 
-        d.time instanceof Date &&
-        !isNaN(d.time) &&
-        isFinite(d.ch4) &&
-        isFinite(d.c2h6) &&
-        isFinite(d.windDir) &&
-        isFinite(d.windSpeed)
-    );
+        windDir: r["WIND_DIR_Sprinter"],
+        windSpeed: r["WIND_SPEED_Sprinter"],
+        lat: r["LAT_Sprinter"],
+        lon: r["LON_Sprinter"],
+        values: r
+    })).filter(d => d.time instanceof Date && !isNaN(d.time));
 
     console.log("Filtered data length:", currentData.length);
     console.log("First filtered point:", currentData[0]);
+
+    populateColumnSelects();
 
     plotTimeSeries();
     plotCH4Ethane(currentData);
@@ -334,34 +383,67 @@ function parseData(rows) {
     plotSelectionMap(currentData);
 }
 
-function plotTimeSeries() {
-    const ethaneFiltered = currentData.map(d => d.c2h6 >= 0 ? d.c2h6 : null);
-    
-    const traceCH4 = {
-        x: currentData.map(d => d.time),
-        y: currentData.map(d => d.ch4),
-        type: "scattergl",
-        mode: "lines+markers",
-        marker: { size: 2, opacity: 0 },
-        line: { width: 1.5, color: '#ff3dff' },
-        name: "CH₄ (ppm)",
-        yaxis: 'y'
-    };
+function populateColumnSelects() {
+    [tsCol1Select, tsCol2Select, ratioXSelect, ratioYSelect].forEach((sel, i) => {
+        const addNone = i === 1; // tsCol2 can be "None"
+        sel.innerHTML = addNone ? '<option value="">None</option>' : '';
+        speciesColumns.forEach(col => {
+            const opt = document.createElement('option');
+            opt.value = col;
+            opt.textContent = col;
+            sel.appendChild(opt);
+        });
+    });
 
-    const traceC2H6 = {
-        x: currentData.map(d => d.time),
-        y: ethaneFiltered,
-        type: "scattergl",
-        mode: "lines+markers",
-        marker: { size: 2, opacity: 0 },
-        line: { width: 1.5, color: '#CFFF04' },
-        name: "C₂H₆ (ppb)",
-        yaxis: 'y2'
-    };
+    // Smart defaults: prefer CH4 for primary, C2H6 for secondary
+    const ch4Col = speciesColumns.find(c => /^CH4_/i.test(c)) || speciesColumns[0] || '';
+    const c2h6Col = speciesColumns.find(c => /^C2H6_/i.test(c)) || '';
+
+    tsCol1Select.value = ch4Col;
+    tsCol2Select.value = c2h6Col;
+    ratioXSelect.value = ch4Col;
+    ratioYSelect.value = c2h6Col || speciesColumns[1] || '';
+}
+
+function plotTimeSeries() {
+    const col1 = tsCol1Select.value;
+    const col2 = tsCol2Select.value;
+    const traces = [];
+
+    if (col1) {
+        traces.push({
+            x: currentData.map(d => d.time),
+            y: currentData.map(d => {
+                const v = d.values[col1];
+                return (v !== null && v !== undefined && isFinite(v)) ? v : null;
+            }),
+            type: "scattergl",
+            mode: "lines+markers",
+            marker: { size: 2, opacity: 0 },
+            line: { width: 1.5, color: '#ff3dff' },
+            name: col1,
+            yaxis: 'y'
+        });
+    }
+
+    if (col2) {
+        traces.push({
+            x: currentData.map(d => d.time),
+            y: currentData.map(d => {
+                const v = d.values[col2];
+                return (v !== null && v !== undefined && isFinite(v)) ? v : null;
+            }),
+            type: "scattergl",
+            mode: "lines+markers",
+            marker: { size: 2, opacity: 0 },
+            line: { width: 1.5, color: '#CFFF04' },
+            name: col2,
+            yaxis: 'y2'
+        });
+    }
 
     const layout = {
         autosize: true,
-
         dragmode: "select",
         paper_bgcolor: "#0b0e14",
         plot_bgcolor: "#020617",
@@ -376,16 +458,16 @@ function plotTimeSeries() {
         },
         yaxis: {
             title: {
-                text: "CH₄ (ppm)",
+                text: col1 || '',
                 font: { color: "#ff3dff" }
             },
             tickfont: { color: "#ff3dff" },
             gridcolor: "#1f2937",
             zerolinecolor: "#1f2937"
         },
-        yaxis2: {
+        yaxis2: col2 ? {
             title: {
-                text: "C₂H₆ (ppb)",
+                text: col2,
                 font: { color: "#CFFF04" }
             },
             tickfont: { color: "#CFFF04" },
@@ -393,7 +475,7 @@ function plotTimeSeries() {
             side: "right",
             gridcolor: "#1f2937",
             zerolinecolor: "#1f2937"
-        },
+        } : { overlaying: 'y', side: 'right', visible: false },
         legend: {
             x: 0.01,
             y: 0.99,
@@ -402,11 +484,11 @@ function plotTimeSeries() {
             borderwidth: 1,
             font: { color: "#e5e7eb", size: 12 }
         },
-        margin: { l: 60, r: 60, t: 50, b: 45 },
+        margin: { l: 60, r: 60, t: 20, b: 45 },
         selectdirection: "h"
     };
 
-    Plotly.newPlot("timeSeries", [traceCH4, traceC2H6], layout);
+    Plotly.newPlot("timeSeries", traces, layout);
 
     document.getElementById("timeSeries")
         .on("plotly_selected", e => {
@@ -420,12 +502,27 @@ function plotTimeSeries() {
 
 
 function plotCH4Ethane(data) {
-    const x = data.map(d => d.ch4);
-    const y = data.map(d => d.c2h6 / 1000); // Convert ppb to ppm
+    const xCol = ratioXSelect.value;
+    const yCol = ratioYSelect.value;
+
+    if (!xCol || !yCol) {
+        Plotly.newPlot("ch4Ethane", [], {
+            paper_bgcolor: '#121826',
+            plot_bgcolor: '#121826',
+            font: { color: '#e5e7eb' }
+        }, { responsive: true });
+        return;
+    }
+
+    const pairs = data
+        .map(d => ({ x: d.values[xCol], y: d.values[yCol] }))
+        .filter(p => p.x !== null && p.y !== null && isFinite(p.x) && isFinite(p.y));
+
+    const x = pairs.map(p => p.x);
+    const y = pairs.map(p => p.y);
 
     const trace = {
-        x: x,
-        y: y,
+        x, y,
         mode: "markers",
         type: "scattergl",
         marker: { color: "#CFFF04", size: 6, opacity: 0.7 },
@@ -433,43 +530,38 @@ function plotCH4Ethane(data) {
     };
 
     let n = x.length;
-    let slope = 0;
-    let r2 = 0;
     let annotations = [];
+    const plotTraces = [trace];
 
     if (n > 1) {
         const sumX = x.reduce((a,b) => a+b, 0);
         const sumY = y.reduce((a,b) => a+b, 0);
         const sumXY = x.reduce((acc, xi, i) => acc + xi*y[i], 0);
         const sumX2 = x.reduce((acc, xi) => acc + xi*xi, 0);
-        const sumY2 = y.reduce((acc, yi) => acc + yi*yi, 0);
 
-        slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
+        const slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
         const intercept = (sumY - slope*sumX) / n;
 
-        // Calculate R²
         const meanY = sumY / n;
         const ssTotal = y.reduce((acc, yi) => acc + Math.pow(yi - meanY, 2), 0);
         const yFit = x.map(xi => slope*xi + intercept);
         const ssResidual = y.reduce((acc, yi, i) => acc + Math.pow(yi - yFit[i], 2), 0);
-        r2 = 1 - (ssResidual / ssTotal);
+        const r2 = ssTotal > 0 ? 1 - (ssResidual / ssTotal) : 0;
 
-        var traceRegression = {
-            x: x,
-            y: yFit,
+        plotTraces.push({
+            x, y: yFit,
             mode: "lines",
-            line: { color: "#ff3dff  ", width: 2 },
+            line: { color: "#ff3dff", width: 2 },
             name: "Regression",
-            hoverinfo: "none",
-        };
+            hoverinfo: "none"
+        });
 
-        // Add annotation with slope and R²
         annotations = [{
             x: 0.5,
             y: 0.95,
             xref: 'paper',
             yref: 'paper',
-            text: `Slope: ${slope.toFixed(4)} C2H6/CH4<br>R²: ${r2.toFixed(3)}`,
+            text: `Slope: ${slope.toFixed(4)} ${yCol}/${xCol}<br>R²: ${r2.toFixed(3)}`,
             showarrow: false,
             font: {
                 color: '#e5e7eb',
@@ -484,28 +576,23 @@ function plotCH4Ethane(data) {
         }];
     }
 
-    const plotlyDarkLayout = {
+    Plotly.newPlot("ch4Ethane", plotTraces, {
         margin: { l: 55, r: 20, t: 20, b: 45 },
-        height: document.getElementById('ch4Ethane').closest('.panel').clientHeight - 16,
         autosize: true,
         paper_bgcolor: '#121826',
         plot_bgcolor: '#121826',
         font: { color: '#e5e7eb' },
-        xaxis: { 
-            title: "CH4 (ppm)",
+        xaxis: {
+            title: xCol,
             gridcolor: '#1f2937'
         },
-        yaxis: { 
-            title: "C2H6 (ppm)",
+        yaxis: {
+            title: yCol,
             gridcolor: '#1f2937'
         },
         showlegend: false,
         annotations: annotations
-    };
-
-    const traces = n > 1 ? [trace, traceRegression] : [trace];
-
-    Plotly.newPlot("ch4Ethane", traces, plotlyDarkLayout, { responsive: true });
+    }, { responsive: true });
 }
 
 function plotWindRose(data) {
@@ -586,22 +673,22 @@ function plotWindRose(data) {
 
 function plotSelectionMap(data) {
     if (data.length === 0) return;
-    
+
     const validGPSData = data.filter(d =>
     isFinite(d.lat) &&
     isFinite(d.lon) &&
-    Math.abs(d.lat) > 1 &&      // kills 0 or near-0
+    Math.abs(d.lat) > 1 &&
     Math.abs(d.lon) > 1
     );
-    
+
     if (validGPSData.length === 0) {
         console.log("No valid GPS coordinates in selection");
         return;
     }
-    
+
     const startPoint = validGPSData[0];
     const endPoint = validGPSData[validGPSData.length - 1];
-    
+
     if (!selectionMap) {
         selectionMap = L.map('selectionMap').setView(
             [startPoint.lat, startPoint.lon],
@@ -658,10 +745,10 @@ function plotSelectionMap(data) {
 
         toggleControl.addTo(selectionMap);
     }
-    
+
     if (startMarker) selectionMap.removeLayer(startMarker);
     if (endMarker) selectionMap.removeLayer(endMarker);
-    
+
     const startIcon = L.divIcon({
         className: 'selection-marker',
         html: `
@@ -693,41 +780,42 @@ function plotSelectionMap(data) {
         iconSize: [10, 10],
         iconAnchor: [5, 5]
     });
-    
+
+    const col1 = tsCol1Select.value;
+    const startVal1 = col1 && isFinite(startPoint.values[col1]) ? `<br>${col1}: ${startPoint.values[col1].toFixed(4)}` : '';
+    const endVal1   = col1 && isFinite(endPoint.values[col1])   ? `<br>${col1}: ${endPoint.values[col1].toFixed(4)}`   : '';
+
     startMarker = L.marker([startPoint.lat, startPoint.lon], { icon: startIcon })
-        .bindPopup(`<b>Start Point</b><br>Time: ${startPoint.time.toISOString()}<br>CH₄: ${startPoint.ch4.toFixed(2)} ppm<br>C₂H₆: ${startPoint.c2h6.toFixed(2)} ppb`)
+        .bindPopup(`<b>Start Point</b><br>Time: ${startPoint.time.toISOString()}${startVal1}`)
         .addTo(selectionMap);
-    
+
     endMarker = L.marker([endPoint.lat, endPoint.lon], { icon: endIcon })
-        .bindPopup(`<b>End Point</b><br>Time: ${endPoint.time.toISOString()}<br>CH₄: ${endPoint.ch4.toFixed(2)} ppm<br>C₂H₆: ${endPoint.c2h6.toFixed(2)} ppb`)
+        .bindPopup(`<b>End Point</b><br>Time: ${endPoint.time.toISOString()}${endVal1}`)
         .addTo(selectionMap);
-    
+
     // Remove previous polyline if present
     if (selectionPolyline) {
         selectionMap.removeLayer(selectionPolyline);
         selectionPolyline = null;
     }
 
-    // Create a path polyline following the GPS coordinates (sorted by time to avoid stray straight chords)
     const pathCoords = validGPSData
         .slice()
         .sort((a, b) => new Date(a.time) - new Date(b.time))
         .map(d => [d.lat, d.lon]);
     if (pathCoords.length > 0) {
-        // Dark halo underneath for contrast against any tile background
         polylineOutline = L.polyline(pathCoords, {
             color: '#000000',
             weight: 6,
             opacity: 0.45
         }).addTo(selectionMap);
- 
-        // Colored line on top
+
         selectionPolyline = L.polyline(pathCoords, {
             color: '#00d4ff    ',
             weight: 3,
             opacity: 0.9
         }).addTo(selectionMap);
- 
+
         try {
             const polyBounds = selectionPolyline.getBounds();
             if (polyBounds.isValid()) {
@@ -771,7 +859,6 @@ function populateDates() {
         loadDate();
     }
     else {
-        // No dates available, handle accordingly
         console.warn('populateDates: no dates available for', campaign);
     }
 }
