@@ -572,7 +572,16 @@ function plotTimeSeries() {
     document.getElementById("timeSeries")
         .on("plotly_selected", e => {
             if (!e) return;
-            const selected = e.points.map(p => currentData[p.pointIndex]);
+            // Only use points from the main data traces (0 = col1, 1 = col2).
+            // The background baseline trace has pointIndices into currentPlumes.pts,
+            // not currentData, so including it would map to wrong rows.
+            const mainTraceCount = (col1 ? 1 : 0) + (col2 ? 1 : 0);
+            const seen = new Set();
+            const selected = e.points
+                .filter(p => p.curveNumber < mainTraceCount)
+                .filter(p => !seen.has(p.pointIndex) && seen.add(p.pointIndex))
+                .map(p => currentData[p.pointIndex]);
+            if (!selected.length) return;
             plotCH4Ethane(selected);
             plotWindRose(selected);
             plotSelectionMap(selected);
