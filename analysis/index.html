@@ -338,6 +338,7 @@ let selectionMap = null;
 let startMarker = null;
 let endMarker = null;
 let selectionPolyline = null;
+let selectionPolylineOutline = null;
 
 
 const campaignSelect = document.getElementById('campaignSelect');
@@ -570,20 +571,27 @@ function plotTimeSeries() {
 
     document.getElementById("timeSeries")
         .on("plotly_selected", e => {
-            if (!e) return;
-            // Only use points from the main data traces (0 = col1, 1 = col2).
-            // The background baseline trace has pointIndices into currentPlumes.pts,
-            // not currentData, so including it would map to wrong rows.
+            if (!e || !e.points.length) return;
+
+            // Derive time range from main data traces only (not the baseline trace).
+            // Then slice all of currentData within that range so GPS rows
+            // are always included regardless of which species columns are shown.
             const mainTraceCount = (col1 ? 1 : 0) + (col2 ? 1 : 0);
-            const seen = new Set();
-            const selected = e.points
-                .filter(p => p.curveNumber < mainTraceCount)
-                .filter(p => !seen.has(p.pointIndex) && seen.add(p.pointIndex))
-                .map(p => currentData[p.pointIndex]);
-            if (!selected.length) return;
-            plotCH4Ethane(selected);
-            plotWindRose(selected);
-            plotSelectionMap(selected);
+            const mainPts = e.points.filter(p => p.curveNumber < mainTraceCount);
+            if (!mainPts.length) return;
+
+            const times = mainPts
+                .map(p => currentData[p.pointIndex]?.time)
+                .filter(Boolean);
+            const tMin = new Date(Math.min(...times));
+            const tMax = new Date(Math.max(...times));
+
+            const inRange = currentData.filter(d => d.time >= tMin && d.time <= tMax);
+            if (!inRange.length) return;
+
+            plotCH4Ethane(inRange);
+            plotWindRose(inRange);
+            plotSelectionMap(inRange);
         });
 }
 
@@ -952,25 +960,25 @@ function plotSelectionMap(data) {
         .bindPopup(`<b>End Point</b><br>Time: ${endPoint.time.toISOString()}${endVal1}`)
         .addTo(selectionMap);
 
-    // Remove previous polyline if present
-    if (selectionPolyline) {
-        selectionMap.removeLayer(selectionPolyline);
-        selectionPolyline = null;
-    }
+    // Remove previous polylines
+    if (selectionPolylineOutline) { selectionMap.removeLayer(selectionPolylineOutline); selectionPolylineOutline = null; }
+    if (selectionPolyline)        { selectionMap.removeLayer(selectionPolyline);        selectionPolyline = null; }
 
+    // Sort GPS points by time and draw path
     const pathCoords = validGPSData
         .slice()
-        .sort((a, b) => new Date(a.time) - new Date(b.time))
+        .sort((a, b) => a.time - b.time)
         .map(d => [d.lat, d.lon]);
+
     if (pathCoords.length > 0) {
-        polylineOutline = L.polyline(pathCoords, {
+        selectionPolylineOutline = L.polyline(pathCoords, {
             color: '#000000',
             weight: 6,
             opacity: 0.45
         }).addTo(selectionMap);
 
         selectionPolyline = L.polyline(pathCoords, {
-            color: '#00d4ff    ',
+            color: '#00d4ff',
             weight: 3,
             opacity: 0.9
         }).addTo(selectionMap);
