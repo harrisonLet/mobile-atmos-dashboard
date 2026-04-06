@@ -147,6 +147,35 @@ nav { height: 56px; }
 .layer-toggle { background: var(--panel-alt); color: var(--text); padding: 4px 8px; font-size: 0.75rem; cursor: pointer; border-radius: 4px; }
 .layer-toggle:hover { background: var(--accent); color: #121826; }
 
+/* Plume detection controls */
+.panel-controls input[type="number"] {
+    width: 56px;
+    height: 26px;
+    padding: 2px 6px;
+    font-size: 0.78rem;
+    background: var(--panel-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+}
+.plume-btn {
+    height: 26px;
+    padding: 0 10px;
+    font-size: 0.78rem;
+    background: var(--panel-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    cursor: pointer;
+}
+.plume-btn:hover { background: var(--accent); color: #121826; }
+.plume-count-label {
+    font-size: 0.78rem;
+    color: #fb7185;
+    margin-left: 4px;
+    font-weight: 500;
+}
+
 
 @media (max-width: 800px) {
     .main-grid, .bottom-grid { flex-direction: column; height: 50vh; }
@@ -211,6 +240,23 @@ nav { height: 56px; }
                 <label for="tsCol2">Right:</label>
                 <select id="tsCol2"></select>
             </div>
+        </div>
+        <div class="panel-controls">
+            <div class="selector-group">
+                <label for="plumeWindow">Window:</label>
+                <input type="number" id="plumeWindow" value="60" min="10" max="600" step="10">
+            </div>
+            <div class="selector-group">
+                <label for="plumeSigma">σ:</label>
+                <input type="number" id="plumeSigma" value="2.0" min="0.5" max="10" step="0.5">
+            </div>
+            <div class="selector-group">
+                <label for="plumeMinDur">Min pts:</label>
+                <input type="number" id="plumeMinDur" value="5" min="1" max="120" step="1">
+            </div>
+            <button class="plume-btn" onclick="runPlumeDetection()">Detect</button>
+            <button class="plume-btn" onclick="clearPlumes()">Clear</button>
+            <span id="plumeCountLabel" class="plume-count-label"></span>
         </div>
         <div id="timeSeries" class="chart-container"></div>
     </div>
@@ -288,6 +334,7 @@ const datesByCampaign= {
 
 let currentData = [];
 let speciesColumns = [];
+let currentPlumes = null;
 let selectionMap = null;
 let startMarker = null;
 let endMarker = null;
@@ -377,6 +424,10 @@ function parseData(rows) {
 
     populateColumnSelects();
 
+    // Reset plume state on new date load
+    currentPlumes = null;
+    document.getElementById('plumeCountLabel').textContent = '';
+
     plotTimeSeries();
     plotCH4Ethane(currentData);
     plotWindRose(currentData);
@@ -444,6 +495,21 @@ function plotTimeSeries() {
         });
     }
 
+    // Add plume baseline trace if detection has been run
+    if (currentPlumes) {
+        traces.push({
+            x: currentPlumes.pts.map(p => currentData[p.i].time),
+            y: currentPlumes.pts.map(p => p.bg),
+            type: 'scattergl',
+            mode: 'lines',
+            line: { width: 1.2, color: '#60a5fa', dash: 'dash' },
+            name: 'Background',
+            yaxis: 'y',
+            hoverinfo: 'skip',
+            connectgaps: true
+        });
+    }
+
     const layout = {
         autosize: true,
         dragmode: "select",
@@ -487,7 +553,18 @@ function plotTimeSeries() {
             font: { color: "#e5e7eb", size: 12 }
         },
         margin: { l: 60, r: 60, t: 20, b: 45 },
-        selectdirection: "h"
+        selectdirection: "h",
+        shapes: currentPlumes ? currentPlumes.plumes.map(plume => ({
+            type: 'rect',
+            xref: 'x',
+            yref: 'paper',
+            x0: plume.start,
+            x1: plume.end,
+            y0: 0,
+            y1: 1,
+            fillcolor: 'rgba(251, 113, 133, 0.15)',
+            line: { width: 0 }
+        })) : []
     };
 
     Plotly.newPlot("timeSeries", traces, layout);
@@ -595,6 +672,78 @@ function plotCH4Ethane(data) {
         showlegend: false,
         annotations: annotations
     }, { responsive: true });
+}
+
+function detectPlumes(col, windowSize, sigma, minDuration) {
+    // Build array of valid (non-null) points for this column, keeping index into currentData
+    const pts = currentData
+        .map((d, i) => ({ i, time: d.time, v: d.values[col] }))
+        .filter(p => p.v !== null && p.v !== undefined && isFinite(p.v));
+
+    // Trailing rolling median + std for background estimation
+    for (let j = 0; j < pts.length; j++) {
+        const win = pts.slice(Math.max(0, j - windowSize), j).map(p => p.v);
+        if (win.length < Math.min(10, windowSize / 2)) {
+            pts[j].bg = pts[j].v;
+            pts[j].std = 0;
+            continue;
+        }
+        const sorted = win.slice().sort((a, b) => a - b);
+        pts[j].bg = sorted[Math.floor(sorted.length / 2)];
+        const mean = win.reduce((a, b) => a + b, 0) / win.length;
+        pts[j].std = Math.sqrt(win.reduce((a, v) => a + (v - mean) ** 2, 0) / win.length);
+    }
+
+    // Flag points exceeding threshold
+    pts.forEach(p => {
+        p.enhancement = p.v - p.bg;
+        p.flagged = p.std > 0 && p.enhancement > sigma * p.std;
+    });
+
+    // Group consecutive flagged points into plumes, apply min duration filter
+    const plumes = [];
+    let plumeStart = null;
+
+    for (let j = 0; j <= pts.length; j++) {
+        const flagged = j < pts.length && pts[j].flagged;
+        if (flagged && plumeStart === null) {
+            plumeStart = j;
+        } else if (!flagged && plumeStart !== null) {
+            if (j - plumeStart >= minDuration) {
+                plumes.push({
+                    start: pts[plumeStart].time,
+                    end: pts[j - 1].time,
+                    points: pts.slice(plumeStart, j)
+                });
+            }
+            plumeStart = null;
+        }
+    }
+
+    return { pts, plumes };
+}
+
+function runPlumeDetection() {
+    const col = tsCol1Select.value;
+    if (!col || !currentData.length) return;
+
+    const windowSize = parseInt(document.getElementById('plumeWindow').value) || 60;
+    const sigma     = parseFloat(document.getElementById('plumeSigma').value)  || 2.0;
+    const minDur    = parseInt(document.getElementById('plumeMinDur').value)   || 5;
+
+    currentPlumes = detectPlumes(col, windowSize, sigma, minDur);
+
+    const n = currentPlumes.plumes.length;
+    document.getElementById('plumeCountLabel').textContent =
+        `${n} plume${n !== 1 ? 's' : ''} detected`;
+
+    plotTimeSeries();
+}
+
+function clearPlumes() {
+    currentPlumes = null;
+    document.getElementById('plumeCountLabel').textContent = '';
+    plotTimeSeries();
 }
 
 function plotWindRose(data) {
