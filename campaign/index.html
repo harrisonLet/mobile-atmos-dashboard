@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Campaign - Mobile Atmos Dashboard</title>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+    --bg: #0b0e14;
+    --panel: #121826;
+    --panel-alt: #0f1422;
+    --border: #1f2937;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --accent: #60a5fa;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--text); background: var(--bg);
+    height: 100vh; overflow: hidden;
+}
+
+nav {
+    background: #020617;
+    border-bottom: 1px solid var(--border);
+    height: 56px; position: sticky; top: 0; z-index: 1000;
+}
+.nav-container { display: flex; align-items: center; padding: 0 12px; height: 56px; }
+.nav-brand {
+    color: var(--text); font-size: 1.05rem; font-weight: 600;
+    padding: 10px 12px; text-decoration: none;
+    display: flex; align-items: center; gap: 10px;
+}
+.nav-logo { height: 28px; }
+.nav-menu { display: flex; list-style: none; margin-left: auto; align-items: center; }
+.nav-link {
+    color: var(--muted); text-decoration: none;
+    padding: 10px 14px; font-size: 0.9rem;
+    display: flex; align-items: center; height: 56px;
+}
+.nav-link:hover { color: var(--text); background: var(--panel-alt); }
+
+.data-selectors { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+.selector-group { display: flex; align-items: center; gap: 5px; }
+.selector-group label { color: var(--muted); font-size: 0.82rem; font-weight: 500; white-space: nowrap; }
+.selector-group select {
+    padding: 2px 8px; font-size: 0.82rem; height: 28px;
+    background: var(--panel-alt); color: var(--text);
+    border: 1px solid var(--border); border-radius: 3px; cursor: pointer;
+    max-width: 170px;
+}
+.load-btn {
+    height: 28px; padding: 0 14px; font-size: 0.82rem;
+    background: var(--accent); color: #020617;
+    border: none; border-radius: 3px; cursor: pointer; font-weight: 600;
+}
+.load-btn:hover { background: #93c5fd; }
+.load-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.status-label { font-size: 0.78rem; color: var(--muted); }
+
+.maps-row {
+    display: flex; height: 47.5vh;
+    gap: 4px; padding: 4px 4px 2px;
+}
+.scatter-row {
+    height: 47.5vh;
+    padding: 2px 4px 4px;
+}
+
+.map-panel {
+    flex: 1; display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--border); overflow: hidden;
+}
+.map-title {
+    font-size: 0.82rem; font-weight: 500; color: var(--muted);
+    padding: 4px 10px; flex: 0 0 auto;
+    background: var(--panel-alt); border-bottom: 1px solid var(--border);
+}
+.map-container { flex: 1; min-height: 0; width: 100%; }
+.scatter-panel {
+    height: 100%;
+    background: var(--panel); border: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+
+<nav>
+    <div class="nav-container">
+        <a href="/~u1460207/dashboard/" class="nav-brand">
+            <img src="/~u1460207/src/BlockU_RGB.png" alt="University of Utah" class="nav-logo">
+            Campaign
+        </a>
+        <ul class="nav-menu">
+            <li><a href="/~u1460207/dashboard/" class="nav-link">Home</a></li>
+            <li><a href="/~u1460207/dashboard/viewer/" class="nav-link">Map Viewer</a></li>
+            <li><a href="/~u1460207/dashboard/analysis/" class="nav-link">Analysis</a></li>
+            <li><a href="/~u1460207/dashboard/campaign/" class="nav-link">Campaign</a></li>
+            <li><a href="/~u1460207/dashboard/about/" class="nav-link">About</a></li>
+            <li class="data-selectors">
+                <div class="selector-group">
+                    <label>Campaign:</label>
+                    <select id="campaignSelect">
+                        <option value="slv">Salt Lake Valley</option>
+                        <option value="arc">ARC</option>
+                        <option value="slc-sos">SLC-SOS</option>
+                    </select>
+                </div>
+                <div class="selector-group">
+                    <label>CH4:</label>
+                    <select id="ch4ColSelect"></select>
+                </div>
+                <div class="selector-group">
+                    <label>C2H6:</label>
+                    <select id="c2h6ColSelect"></select>
+                </div>
+                <button class="load-btn" id="loadBtn" onclick="loadCampaign()">Load</button>
+                <span class="status-label" id="statusLabel">Select a campaign and click Load</span>
+            </li>
+        </ul>
+    </div>
+</nav>
+
+<div class="maps-row">
+    <div class="map-panel">
+        <div class="map-title">CH4 Enhancement</div>
+        <div id="ch4Map" class="map-container"></div>
+    </div>
+    <div class="map-panel">
+        <div class="map-title">C2H6 / CH4 Local Slope &nbsp;&#x25A0; green = biogenic &nbsp;&#x25A0; pink = thermogenic</div>
+        <div id="ratioMap" class="map-container"></div>
+    </div>
+</div>
+
+<div class="scatter-row">
+    <div id="scatterPlot" class="scatter-panel"></div>
+</div>
+
+<script>
+
+const MET_COLS = new Set([
+    'TIMESTAMP', 'LAT_Sprinter', 'LON_Sprinter',
+    'TEMP_C_Sprinter', 'RH_Sprinter', 'WIND_DIR_Sprinter',
+    'WIND_SPEED_Sprinter', 'PRESSURE_Sprinter'
+]);
+
+// ── Color functions ────────────────────────────────────────────────────────────
+
+function plasmaColor(t) {
+    t = Math.max(0, Math.min(1, t));
+    const stops = [
+        [13,8,135],[84,2,163],[139,10,165],
+        [185,50,137],[219,92,104],[244,136,73],
+        [253,187,45],[240,249,33]
+    ];
+    const s = t * (stops.length - 1);
+    const i = Math.min(Math.floor(s), stops.length - 2);
+    const f = s - i;
+    const [r0,g0,b0] = stops[i], [r1,g1,b1] = stops[i+1];
+    return `rgb(${Math.round(r0+f*(r1-r0))},${Math.round(g0+f*(g1-g0))},${Math.round(b0+f*(b1-b0))})`;
+}
+
+function ratioColor(t) {
+    t = Math.max(0, Math.min(1, t));
+    // green #22c55e (34,197,94) → pink #ec4899 (236,72,153)
+    return `rgb(${Math.round(34+t*202)},${Math.round(197+t*(72-197))},${Math.round(94+t*(153-94))})`;
+}
+
+function percentile(arr, p) {
+    if (!arr.length) return 0;
+    const s = arr.slice().sort((a,b) => a-b);
+    const idx = (p/100) * (s.length-1);
+    const lo = Math.floor(idx), hi = Math.ceil(idx);
+    return lo === hi ? s[lo] : s[lo] + (idx-lo)*(s[hi]-s[lo]);
+}
+
+function slopeOLS(x, y) {
+    const n = x.length;
+    if (n < 3) return NaN;
+    const mx = x.reduce((a,b)=>a+b,0)/n;
+    const my = y.reduce((a,b)=>a+b,0)/n;
+    let num=0, den=0;
+    for (let i=0;i<n;i++){ num+=(x[i]-mx)*(y[i]-my); den+=(x[i]-mx)**2; }
+    return den > 0 ? num/den : NaN;
+}
+
+// ── Map state ──────────────────────────────────────────────────────────────────
+
+let ch4Map, ratioMap;
+let ch4Layer, ratioLayer;
+let ch4Renderer, ratioRenderer;
+let ch4ColorbarCtrl = null, ratioColorbarCtrl = null;
+let syncing = false;
+let speciesColumns = [];
+
+function initMaps() {
+    const center = [40.76, -111.89]; // SLV default
+
+    ch4Map   = L.map('ch4Map').setView(center, 11);
+    ratioMap = L.map('ratioMap').setView(center, 11);
+
+    const tileUrl  = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+    const tileOpts = { maxZoom: 19, attribution: 'Tiles © Esri' };
+    L.tileLayer(tileUrl, tileOpts).addTo(ch4Map);
+    L.tileLayer(tileUrl, tileOpts).addTo(ratioMap);
+
+    ch4Renderer   = L.canvas({ padding: 0.5 });
+    ratioRenderer = L.canvas({ padding: 0.5 });
+
+    ch4Layer   = L.featureGroup().addTo(ch4Map);
+    ratioLayer = L.featureGroup().addTo(ratioMap);
+
+    // Keep maps in sync
+    ch4Map.on('move', () => {
+        if (syncing) return;
+        syncing = true;
+        ratioMap.setView(ch4Map.getCenter(), ch4Map.getZoom(), { animate: false });
+        syncing = false;
+    });
+    ratioMap.on('move', () => {
+        if (syncing) return;
+        syncing = true;
+        ch4Map.setView(ratioMap.getCenter(), ratioMap.getZoom(), { animate: false });
+        syncing = false;
+    });
+}
+
+// ── Data loading ───────────────────────────────────────────────────────────────
+
+function loadCampaign() {
+    const campaign = document.getElementById('campaignSelect').value;
+    const csvPath  = `../data/${campaign}/${campaign}_campaign.csv`;
+
+    setStatus('Loading…');
+    document.getElementById('loadBtn').disabled = true;
+
+    Papa.parse(csvPath, {
+        download: true,
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+        complete: r => {
+            document.getElementById('loadBtn').disabled = false;
+            if (!r.data.length) { setStatus('No data in CSV'); return; }
+            setStatus(`${r.data.length.toLocaleString()} rows loaded — computing…`);
+            // Yield to browser so status label renders before heavy compute
+            setTimeout(() => processCampaign(r.data), 20);
+        },
+        error: err => {
+            document.getElementById('loadBtn').disabled = false;
+            setStatus('Error loading CSV');
+            console.error(err);
+        }
+    });
+}
+
+function processCampaign(rows) {
+    // Detect and populate column selects
+    const allCols = Object.keys(rows[0]);
+    speciesColumns = allCols.filter(c => !MET_COLS.has(c));
+    populateColumnSelects();
+
+    const ch4Col  = document.getElementById('ch4ColSelect').value;
+    const c2h6Col = document.getElementById('c2h6ColSelect').value;
+    if (!ch4Col || !c2h6Col) { setStatus('Could not detect CH4 / C2H6 columns'); return; }
+
+    // Build typed point array — keep ALL rows that have a valid timestamp
+    const pts = rows.map(r => ({
+        t:    new Date(r['TIMESTAMP']).getTime(),
+        lat:  r['LAT_Sprinter'],
+        lon:  r['LON_Sprinter'],
+        ch4:  r[ch4Col],
+        c2h6: r[c2h6Col]
+    })).filter(p => !isNaN(p.t));
+
+    pts.sort((a, b) => a.t - b.t);
+
+    computeFields(pts, 60_000, 30_000);   // 60 s background, 30 s ratio window
+
+    setStatus(`Rendering ${pts.length.toLocaleString()} points…`);
+    setTimeout(() => {
+        renderMaps(pts);
+        renderScatter(pts, ch4Col, c2h6Col);
+        setStatus(`${pts.length.toLocaleString()} points`);
+    }, 20);
+}
+
+// ── Computation ────────────────────────────────────────────────────────────────
+
+function computeFields(pts, bgWindowMs, ratioWindowMs) {
+    // Rolling CH4 background: trailing median over bgWindowMs
+    let winL = 0;
+    for (let i = 0; i < pts.length; i++) {
+        while (pts[i].t - pts[winL].t > bgWindowMs) winL++;
+
+        const win = [];
+        for (let j = winL; j < i; j++) {
+            if (Number.isFinite(pts[j].ch4)) win.push(pts[j].ch4);
+        }
+
+        if (win.length >= 5) {
+            win.sort((a, b) => a - b);
+            pts[i].bg = win[Math.floor(win.length / 2)];
+        } else {
+            pts[i].bg = pts[i].ch4 || 0;
+        }
+        pts[i].enh = Number.isFinite(pts[i].ch4) ? pts[i].ch4 - pts[i].bg : NaN;
+    }
+
+    // Rolling C2H6/CH4 slope: trailing OLS over ratioWindowMs
+    winL = 0;
+    for (let i = 0; i < pts.length; i++) {
+        while (pts[i].t - pts[winL].t > ratioWindowMs) winL++;
+
+        const xs = [], ys = [];
+        for (let j = winL; j <= i; j++) {
+            if (Number.isFinite(pts[j].ch4) && Number.isFinite(pts[j].c2h6)) {
+                xs.push(pts[j].ch4);
+                ys.push(pts[j].c2h6);
+            }
+        }
+        pts[i].ratio = slopeOLS(xs, ys);
+    }
+}
+
+// ── Column selects ─────────────────────────────────────────────────────────────
+
+function populateColumnSelects() {
+    const ch4Sel  = document.getElementById('ch4ColSelect');
+    const c2h6Sel = document.getElementById('c2h6ColSelect');
+
+    [ch4Sel, c2h6Sel].forEach(sel => {
+        sel.innerHTML = '';
+        speciesColumns.forEach(col => {
+            const opt = document.createElement('option');
+            opt.value = col; opt.textContent = col;
+            sel.appendChild(opt);
+        });
+    });
+
+    // Auto-detect: prefer Picarro CH4 and Aeris C2H6
+    const ch4Default  = speciesColumns.find(c => /CH4/i.test(c)  && /picarro/i.test(c))
+                     || speciesColumns.find(c => /^CH4_/i.test(c))  || '';
+    const c2h6Default = speciesColumns.find(c => /C2H6/i.test(c) && /aeris/i.test(c))
+                     || speciesColumns.find(c => /^C2H6_/i.test(c)) || '';
+
+    if (ch4Default)  ch4Sel.value  = ch4Default;
+    if (c2h6Default) c2h6Sel.value = c2h6Default;
+}
+
+// ── Map rendering ──────────────────────────────────────────────────────────────
+
+function makeColorbarControl(colorFn, minVal, maxVal, title, units, position) {
+    const ctrl = L.control({ position });
+    ctrl.onAdd = function () {
+        const div = L.DomUtil.create('div');
+        L.DomEvent.disableScrollPropagation(div);
+        L.DomEvent.disableClickPropagation(div);
+
+        const n = 16;
+        const stops = Array.from({ length: n }, (_, k) => colorFn(k / (n - 1)));
+        const gradient = `linear-gradient(to top, ${stops.map((c, k) => `${c} ${(k/(n-1)*100).toFixed(0)}%`).join(', ')})`;
+
+        const fmt = v => {
+            const abs = Math.abs(v);
+            if (abs === 0) return '0';
+            if (abs >= 100) return v.toFixed(1);
+            if (abs >= 0.1) return v.toFixed(3);
+            return v.toExponential(2);
+        };
+
+        div.innerHTML = `
+            <div style="background:rgba(18,24,38,0.92);padding:7px 9px;border-radius:4px;border:1px solid #1f2937;font-family:-apple-system,sans-serif">
+                <div style="font-size:10px;color:#9ca3af;text-align:center;margin-bottom:5px">${title}</div>
+                <div style="display:flex;gap:6px;align-items:stretch">
+                    <div style="width:14px;height:120px;background:${gradient};border-radius:2px;flex-shrink:0"></div>
+                    <div style="display:flex;flex-direction:column;justify-content:space-between;font-size:10px;color:#e5e7eb">
+                        <span>${fmt(maxVal)}</span>
+                        <span>${fmt((maxVal + minVal) / 2)}</span>
+                        <span>${fmt(minVal)}</span>
+                    </div>
+                </div>
+                <div style="font-size:9px;color:#9ca3af;text-align:center;margin-top:4px">${units}</div>
+            </div>`;
+        return div;
+    };
+    return ctrl;
+}
+
+function renderMaps(pts) {
+    const STRIDE = 10;
+
+    const enhVals   = pts.map(p => p.enh).filter(v => Number.isFinite(v));
+    const ratioVals = pts.map(p => p.ratio).filter(v => Number.isFinite(v) && v > 0);
+
+    if (!enhVals.length) return;
+
+    // Clamp enhancement min to 0 — we care about positive anomalies
+    const enhMin   = Math.max(0, percentile(enhVals, 2));
+    const enhMax   = percentile(enhVals, 98);
+    const ratioMin = ratioVals.length ? percentile(ratioVals, 2)  : 0;
+    const ratioMax = ratioVals.length ? percentile(ratioVals, 98) : 1;
+
+    ch4Layer.clearLayers();
+    ratioLayer.clearLayers();
+
+    for (let i = 0; i < pts.length; i += STRIDE) {
+        const p = pts[i];
+        if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon)) continue;
+        if (Math.abs(p.lat) < 1 || Math.abs(p.lon) < 1) continue;
+
+        if (Number.isFinite(p.enh)) {
+            const t = enhMax > enhMin ? (p.enh - enhMin) / (enhMax - enhMin) : 0;
+            L.circleMarker([p.lat, p.lon], {
+                radius: 3, weight: 0,
+                fillColor: plasmaColor(t),
+                fillOpacity: 0.85,
+                renderer: ch4Renderer
+            }).addTo(ch4Layer);
+        }
+
+        if (Number.isFinite(p.ratio) && p.ratio > 0) {
+            const t = ratioMax > ratioMin ? (p.ratio - ratioMin) / (ratioMax - ratioMin) : 0;
+            L.circleMarker([p.lat, p.lon], {
+                radius: 3, weight: 0,
+                fillColor: ratioColor(t),
+                fillOpacity: 0.85,
+                renderer: ratioRenderer
+            }).addTo(ratioLayer);
+        }
+    }
+
+    // Colorbars
+    if (ch4ColorbarCtrl)   ch4Map.removeControl(ch4ColorbarCtrl);
+    if (ratioColorbarCtrl) ratioMap.removeControl(ratioColorbarCtrl);
+
+    ch4ColorbarCtrl   = makeColorbarControl(plasmaColor, enhMin, enhMax,   'CH4 Enhancement', 'ppm',     'bottomright');
+    ratioColorbarCtrl = makeColorbarControl(ratioColor,  ratioMin, ratioMax, 'C2H6/CH4 slope',  'ppb/ppm', 'bottomright');
+
+    ch4ColorbarCtrl.addTo(ch4Map);
+    ratioColorbarCtrl.addTo(ratioMap);
+
+    // Fit both maps to data extent
+    const latLngs = pts
+        .filter((p, i) => i % STRIDE === 0 && Number.isFinite(p.lat) && Number.isFinite(p.lon) && Math.abs(p.lat) > 1)
+        .map(p => [p.lat, p.lon]);
+
+    if (latLngs.length) {
+        const bounds = L.latLngBounds(latLngs);
+        if (bounds.isValid()) {
+            ch4Map.fitBounds(bounds,   { padding: [20, 20] });
+            ratioMap.fitBounds(bounds, { padding: [20, 20] });
+        }
+    }
+}
+
+// ── Scatter plot ───────────────────────────────────────────────────────────────
+
+function renderScatter(pts, ch4Col, c2h6Col) {
+    const STRIDE = 5;
+    const pairs = pts.filter((_, i) => i % STRIDE === 0)
+                     .filter(p => Number.isFinite(p.ch4) && Number.isFinite(p.c2h6));
+
+    const x = pairs.map(p => p.ch4);
+    const y = pairs.map(p => p.c2h6);
+
+    const traces = [{
+        x, y,
+        mode: 'markers',
+        type: 'scattergl',
+        marker: { color: '#CFFF04', size: 3, opacity: 0.35 },
+        name: 'Data'
+    }];
+
+    let annotations = [];
+
+    if (x.length > 1) {
+        const n  = x.length;
+        const mx = x.reduce((a,b)=>a+b,0)/n;
+        const my = y.reduce((a,b)=>a+b,0)/n;
+        let num=0, den=0;
+        x.forEach((xi,i) => { num+=(xi-mx)*(y[i]-my); den+=(xi-mx)**2; });
+        const slope     = den > 0 ? num/den : 0;
+        const intercept = my - slope*mx;
+
+        const xMin = Math.min(...x), xMax = Math.max(...x);
+        traces.push({
+            x: [xMin, xMax],
+            y: [slope*xMin+intercept, slope*xMax+intercept],
+            mode: 'lines',
+            line: { color: '#ec4899', width: 2 },
+            name: 'Regression',
+            hoverinfo: 'none'
+        });
+
+        const yFit  = x.map(xi => slope*xi+intercept);
+        const ssRes = y.reduce((a,yi,i) => a+(yi-yFit[i])**2, 0);
+        const ssTot = y.reduce((a,yi)   => a+(yi-my)**2, 0);
+        const r2    = ssTot > 0 ? 1 - ssRes/ssTot : 0;
+
+        annotations = [{
+            x: 0.5, y: 0.95, xref: 'paper', yref: 'paper',
+            text: `Slope: ${slope.toFixed(4)} ${c2h6Col}/${ch4Col}<br>R²: ${r2.toFixed(3)}`,
+            showarrow: false,
+            font: { color: '#e5e7eb', size: 13, family: 'monospace' },
+            bgcolor: 'rgba(18,24,38,0.85)',
+            bordercolor: '#ffffff', borderwidth: 1, borderpad: 8, align: 'left'
+        }];
+    }
+
+    Plotly.newPlot('scatterPlot', traces, {
+        autosize: true,
+        paper_bgcolor: '#121826',
+        plot_bgcolor: '#020617',
+        font: { color: '#e5e7eb' },
+        margin: { l: 65, r: 20, t: 20, b: 55 },
+        xaxis: {
+            title: { text: ch4Col,  font: { color: '#9ca3af' } },
+            tickfont: { color: '#9ca3af' },
+            gridcolor: '#1f2937', zerolinecolor: '#1f2937'
+        },
+        yaxis: {
+            title: { text: c2h6Col, font: { color: '#9ca3af' } },
+            tickfont: { color: '#9ca3af' },
+            gridcolor: '#1f2937', zerolinecolor: '#1f2937'
+        },
+        showlegend: false,
+        annotations
+    }, { responsive: true });
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function setStatus(msg) {
+    document.getElementById('statusLabel').textContent = msg;
+}
+
+// Kick off map initialization immediately
+initMaps();
+
+</script>
+</body>
+</html>
