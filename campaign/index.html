@@ -86,6 +86,8 @@ nav {
     height: 100%;
     background: var(--panel); border: 1px solid var(--border);
 }
+.layer-toggle { background: var(--panel-alt); color: var(--text); padding: 4px 8px; font-size: 0.75rem; cursor: pointer; border-radius: 4px; }
+.layer-toggle:hover { background: var(--accent); color: #121826; }
 </style>
 </head>
 <body>
@@ -204,16 +206,53 @@ function initMaps() {
     ch4Map   = L.map('ch4Map').setView(center, 11);
     ratioMap = L.map('ratioMap').setView(center, 11);
 
-    const tileUrl  = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-    const tileOpts = { maxZoom: 19, attribution: 'Tiles © Esri' };
-    L.tileLayer(tileUrl, tileOpts).addTo(ch4Map);
-    L.tileLayer(tileUrl, tileOpts).addTo(ratioMap);
+    const satUrl  = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+    const osmUrl  = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    const satOpts = { maxZoom: 19, attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics' };
+    const osmOpts = { maxZoom: 19, attribution: '© OpenStreetMap contributors' };
+
+    const ch4Sat   = L.tileLayer(satUrl, satOpts).addTo(ch4Map);
+    const ch4Osm   = L.tileLayer(osmUrl, osmOpts);
+    const ratioSat = L.tileLayer(satUrl, satOpts).addTo(ratioMap);
+    const ratioOsm = L.tileLayer(osmUrl, osmOpts);
 
     ch4Renderer   = L.canvas({ padding: 0.5 });
     ratioRenderer = L.canvas({ padding: 0.5 });
 
     ch4Layer   = L.featureGroup().addTo(ch4Map);
     ratioLayer = L.featureGroup().addTo(ratioMap);
+
+    // Shared tile toggle — clicking either button switches both maps
+    let isSatellite = true;
+
+    function makeTileToggle(map, sat, osm) {
+        const ctrl = L.control({ position: 'topright' });
+        ctrl.onAdd = function () {
+            const div = L.DomUtil.create('div', 'layer-toggle');
+            div.innerHTML = 'open';
+            L.DomEvent.disableClickPropagation(div);
+            div.onclick = () => {
+                isSatellite = !isSatellite;
+                // Switch both maps together
+                if (isSatellite) {
+                    ch4Map.removeLayer(ch4Osm);   ch4Sat.addTo(ch4Map);
+                    ratioMap.removeLayer(ratioOsm); ratioSat.addTo(ratioMap);
+                } else {
+                    ch4Map.removeLayer(ch4Sat);   ch4Osm.addTo(ch4Map);
+                    ratioMap.removeLayer(ratioSat); ratioOsm.addTo(ratioMap);
+                }
+                // Update both button labels
+                document.querySelectorAll('.layer-toggle').forEach(el => {
+                    el.innerHTML = isSatellite ? 'open' : 'sat';
+                });
+            };
+            return div;
+        };
+        ctrl.addTo(map);
+    }
+
+    makeTileToggle(ch4Map,   ch4Sat,   ch4Osm);
+    makeTileToggle(ratioMap, ratioSat, ratioOsm);
 
     // Keep maps in sync
     ch4Map.on('move', () => {
@@ -293,23 +332,32 @@ function processCampaign(rows) {
 // ── Computation ────────────────────────────────────────────────────────────────
 
 function computeFields(pts, bgWindowMs, ratioWindowMs) {
-    // Rolling CH4 background: trailing median over bgWindowMs
+    // Rolling CH4 and C2H6 backgrounds: trailing median over bgWindowMs
     let winL = 0;
     for (let i = 0; i < pts.length; i++) {
         while (pts[i].t - pts[winL].t > bgWindowMs) winL++;
 
-        const win = [];
+        const ch4win = [], c2h6win = [];
         for (let j = winL; j < i; j++) {
-            if (Number.isFinite(pts[j].ch4)) win.push(pts[j].ch4);
+            if (Number.isFinite(pts[j].ch4))  ch4win.push(pts[j].ch4);
+            if (Number.isFinite(pts[j].c2h6)) c2h6win.push(pts[j].c2h6);
         }
 
-        if (win.length >= 5) {
-            win.sort((a, b) => a - b);
-            pts[i].bg = win[Math.floor(win.length / 2)];
+        if (ch4win.length >= 5) {
+            ch4win.sort((a,b) => a-b);
+            pts[i].bg = ch4win[Math.floor(ch4win.length / 2)];
         } else {
             pts[i].bg = pts[i].ch4 || 0;
         }
-        pts[i].enh = Number.isFinite(pts[i].ch4) ? pts[i].ch4 - pts[i].bg : NaN;
+        if (c2h6win.length >= 5) {
+            c2h6win.sort((a,b) => a-b);
+            pts[i].c2h6bg = c2h6win[Math.floor(c2h6win.length / 2)];
+        } else {
+            pts[i].c2h6bg = pts[i].c2h6 || 0;
+        }
+
+        pts[i].enh     = Number.isFinite(pts[i].ch4)  ? pts[i].ch4  - pts[i].bg     : NaN;
+        pts[i].c2h6enh = Number.isFinite(pts[i].c2h6) ? pts[i].c2h6 - pts[i].c2h6bg : NaN;
     }
 
     // Rolling C2H6/CH4 slope: trailing OLS over ratioWindowMs
@@ -463,22 +511,71 @@ function renderMaps(pts) {
 
 function renderScatter(pts, ch4Col, c2h6Col) {
     const STRIDE = 5;
-    const pairs = pts.filter((_, i) => i % STRIDE === 0)
-                     .filter(p => Number.isFinite(p.ch4) && Number.isFinite(p.c2h6));
 
-    const x = pairs.map(p => p.ch4);
-    const y = pairs.map(p => p.c2h6);
+    // Use enhancements — reveals source ratio clearly
+    const pairs = pts
+        .filter((_, i) => i % STRIDE === 0)
+        .filter(p => Number.isFinite(p.enh) && p.enh > 0 && Number.isFinite(p.c2h6enh));
 
-    const traces = [{
+    if (!pairs.length) return;
+
+    const x        = pairs.map(p => p.enh);
+    const y        = pairs.map(p => p.c2h6enh);
+    const ratioArr = pairs.map(p => (Number.isFinite(p.ratio) ? p.ratio : 0));
+
+    const xMax     = percentile(x, 99) * 1.15;
+    const yDataMax = percentile(y.filter(v => v > 0), 99) * 1.15;
+
+    // Fan slope thresholds in ppb C2H6 / ppm CH4
+    // Assumes Picarro CH4 (ppm) and Aeris C2H6 (ppb)
+    // vol% → ppb/ppm:  1% = 10, 2% = 20, 8% = 80
+    const S1 = 10;    // 1%  biogenic upper bound
+    const S2 = 20;    // 2%  natural gas lower bound
+    const S3 = 80;    // 8%  natural gas upper bound
+
+    const yAxisMax = Math.max(yDataMax, S3 * xMax);
+    const yBig     = yAxisMax * 10;   // extends fans beyond visible area
+
+    // Fan filled regions — drawn first so data renders on top
+    const fans = [
+        { name: 'Biogenic  (<1%)',      x: [0, xMax, xMax, 0], y: [0,           0,            S1*xMax,  0], fill: 'rgba(34,197,94,0.13)'  },
+        { name: '1–2%',                 x: [0, xMax, xMax, 0], y: [0,           S1*xMax,      S2*xMax,  0], fill: 'rgba(234,179,8,0.13)'  },
+        { name: 'Natural gas  (2–8%)',  x: [0, xMax, xMax, 0], y: [0,           S2*xMax,      S3*xMax,  0], fill: 'rgba(236,72,153,0.13)' },
+        { name: '>8%',                  x: [0, xMax, xMax, 0], y: [0,           S3*xMax,      yBig,     0], fill: 'rgba(239,68,68,0.10)'  },
+    ];
+
+    const traces = fans.map(f => ({
+        x: f.x, y: f.y,
+        fill: 'toself', fillcolor: f.fill,
+        line: { width: 0 }, mode: 'lines', type: 'scatter',
+        hoverinfo: 'skip', showlegend: true, name: f.name
+    }));
+
+    // Scatter points colored by local ratio
+    const validRatios = ratioArr.filter(Number.isFinite);
+    const ratioMin = percentile(validRatios, 5);
+    const ratioMax = percentile(validRatios, 95);
+
+    traces.push({
         x, y,
         mode: 'markers',
         type: 'scattergl',
-        marker: { color: '#CFFF04', size: 3, opacity: 0.35 },
+        marker: {
+            color: ratioArr,
+            colorscale: [[0, '#22c55e'], [0.5, '#eab308'], [1, '#ec4899']],
+            cmin: ratioMin,
+            cmax: ratioMax,
+            size: 3,
+            opacity: 0.55,
+            showscale: false
+        },
+        hovertemplate: 'ΔCH4: %{x:.4f} ppm<br>ΔC2H6: %{y:.2f} ppb<extra></extra>',
+        showlegend: false,
         name: 'Data'
-    }];
+    });
 
-    let annotations = [];
-
+    // OLS regression on enhancement data
+    const annotations = [];
     if (x.length > 1) {
         const n  = x.length;
         const mx = x.reduce((a,b)=>a+b,0)/n;
@@ -488,30 +585,43 @@ function renderScatter(pts, ch4Col, c2h6Col) {
         const slope     = den > 0 ? num/den : 0;
         const intercept = my - slope*mx;
 
-        const xMin = Math.min(...x), xMax = Math.max(...x);
         traces.push({
-            x: [xMin, xMax],
-            y: [slope*xMin+intercept, slope*xMax+intercept],
+            x: [0, xMax],
+            y: [intercept, slope*xMax + intercept],
             mode: 'lines',
-            line: { color: '#ec4899', width: 2 },
-            name: 'Regression',
-            hoverinfo: 'none'
+            line: { color: '#ffffff', width: 1.5, dash: 'dash' },
+            hoverinfo: 'none', showlegend: false
         });
 
-        const yFit  = x.map(xi => slope*xi+intercept);
+        const yFit  = x.map(xi => slope*xi + intercept);
         const ssRes = y.reduce((a,yi,i) => a+(yi-yFit[i])**2, 0);
         const ssTot = y.reduce((a,yi)   => a+(yi-my)**2, 0);
         const r2    = ssTot > 0 ? 1 - ssRes/ssTot : 0;
 
-        annotations = [{
-            x: 0.5, y: 0.95, xref: 'paper', yref: 'paper',
-            text: `Slope: ${slope.toFixed(4)} ${c2h6Col}/${ch4Col}<br>R²: ${r2.toFixed(3)}`,
+        annotations.push({
+            x: 0.02, y: 0.97, xref: 'paper', yref: 'paper',
+            text: `Slope: ${slope.toFixed(3)} ppb/ppm<br>R²: ${r2.toFixed(3)}`,
             showarrow: false,
-            font: { color: '#e5e7eb', size: 13, family: 'monospace' },
+            font: { color: '#e5e7eb', size: 12, family: 'monospace' },
             bgcolor: 'rgba(18,24,38,0.85)',
-            bordercolor: '#ffffff', borderwidth: 1, borderpad: 8, align: 'left'
-        }];
+            bordercolor: '#1f2937', borderwidth: 1, borderpad: 6,
+            align: 'left', xanchor: 'left', yanchor: 'top'
+        });
     }
+
+    // Fan boundary ratio labels along the slope lines
+    const labelX = xMax * 0.86;
+    [[S1, '1%'], [S2, '2%'], [S3, '8%']].forEach(([s, label]) => {
+        const labelY = s * labelX;
+        if (labelY <= yAxisMax) {
+            annotations.push({
+                x: labelX, y: labelY, xref: 'x', yref: 'y',
+                text: label, showarrow: false,
+                font: { color: 'rgba(255,255,255,0.45)', size: 10 },
+                yshift: -9, xanchor: 'right'
+            });
+        }
+    });
 
     Plotly.newPlot('scatterPlot', traces, {
         autosize: true,
@@ -520,17 +630,30 @@ function renderScatter(pts, ch4Col, c2h6Col) {
         font: { color: '#e5e7eb' },
         margin: { l: 65, r: 20, t: 20, b: 55 },
         xaxis: {
-            title: { text: ch4Col,  font: { color: '#9ca3af' } },
+            title: { text: 'ΔCH4 (ppm)', font: { color: '#9ca3af' } },
             tickfont: { color: '#9ca3af' },
-            gridcolor: '#1f2937', zerolinecolor: '#1f2937'
+            gridcolor: '#1f2937', zerolinecolor: '#1f2937',
+            range: [0, xMax]
         },
         yaxis: {
-            title: { text: c2h6Col, font: { color: '#9ca3af' } },
+            title: { text: 'ΔC2H6 (ppb)', font: { color: '#9ca3af' } },
             tickfont: { color: '#9ca3af' },
-            gridcolor: '#1f2937', zerolinecolor: '#1f2937'
+            gridcolor: '#1f2937', zerolinecolor: '#1f2937',
+            range: [0, yAxisMax]
         },
-        showlegend: false,
-        annotations
+        showlegend: true,
+        legend: {
+            x: 0.99, y: 0.99, xanchor: 'right', yanchor: 'top',
+            bgcolor: 'rgba(18,24,38,0.85)',
+            bordercolor: '#1f2937', borderwidth: 1,
+            font: { color: '#e5e7eb', size: 11 }
+        },
+        annotations,
+        shapes: [
+            { type: 'line', xref: 'x', yref: 'y', x0: 0, y0: 0, x1: xMax, y1: S1*xMax, line: { color: 'rgba(255,255,255,0.18)', width: 1 } },
+            { type: 'line', xref: 'x', yref: 'y', x0: 0, y0: 0, x1: xMax, y1: S2*xMax, line: { color: 'rgba(255,255,255,0.18)', width: 1 } },
+            { type: 'line', xref: 'x', yref: 'y', x0: 0, y0: 0, x1: xMax, y1: S3*xMax, line: { color: 'rgba(255,255,255,0.18)', width: 1 } },
+        ]
     }, { responsive: true });
 }
 
