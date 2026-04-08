@@ -571,20 +571,29 @@ function plotTimeSeries() {
 
     document.getElementById("timeSeries")
         .on("plotly_selected", e => {
-            if (!e || !e.points.length) return;
+            if (!e) return;
 
-            // Derive time range from main data traces only (not the baseline trace).
-            // Then slice all of currentData within that range so GPS rows
-            // are always included regardless of which species columns are shown.
-            const mainTraceCount = (col1 ? 1 : 0) + (col2 ? 1 : 0);
-            const mainPts = e.points.filter(p => p.curveNumber < mainTraceCount);
-            if (!mainPts.length) return;
+            // Use e.range.x directly — it gives the exact x-axis bounds of the
+            // selection box without depending on pointIndex, which can be unreliable
+            // with connectgaps:true and null y-values in scattergl traces.
+            let tMin, tMax;
+            if (e.range && e.range.x && e.range.x.length === 2) {
+                tMin = new Date(e.range.x[0]);
+                tMax = new Date(e.range.x[1]);
+            } else if (e.points && e.points.length) {
+                // Fallback for lasso or other selection modes
+                const mainTraceCount = (col1 ? 1 : 0) + (col2 ? 1 : 0);
+                const mainPts = e.points.filter(p => p.curveNumber < mainTraceCount);
+                if (!mainPts.length) return;
+                const times = mainPts.map(p => currentData[p.pointIndex]?.time).filter(Boolean);
+                if (!times.length) return;
+                tMin = new Date(Math.min(...times));
+                tMax = new Date(Math.max(...times));
+            } else {
+                return;
+            }
 
-            const times = mainPts
-                .map(p => currentData[p.pointIndex]?.time)
-                .filter(Boolean);
-            const tMin = new Date(Math.min(...times));
-            const tMax = new Date(Math.max(...times));
+            if (isNaN(tMin) || isNaN(tMax)) return;
 
             const inRange = currentData.filter(d => d.time >= tMin && d.time <= tMax);
             if (!inRange.length) return;
@@ -912,86 +921,53 @@ function plotSelectionMap(data) {
         toggleControl.addTo(selectionMap);
     }
 
-    // Remove old markers only once we know we have valid data to replace them with
-    if (startMarker) { selectionMap.removeLayer(startMarker); startMarker = null; }
-    if (endMarker)   { selectionMap.removeLayer(endMarker);   endMarker   = null; }
-
-    const startIcon = L.divIcon({
-        className: 'selection-marker',
-        html: `
-            <div style="
-                width: 15px;
-                height: 15px;
-                background: #ffffff;
-                border: 2.5px solid green;
-                border-radius: 50%;
-                box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
-            "></div>
-        `,
-        iconSize: [10, 10],
-        iconAnchor: [5, 5]
-    });
-
-    const endIcon = L.divIcon({
-        className: 'selection-marker',
-        html: `
-            <div style="
-                width: 15px;
-                height: 15px;
-                background: #ffffff;
-                border: 2.5px solid red;
-                border-radius: 50%;
-                box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
-            "></div>
-        `,
-        iconSize: [10, 10],
-        iconAnchor: [5, 5]
-    });
-
+    // Build all new layers before touching existing ones — if anything
+    // throws during construction the old state remains intact
     const col1 = tsCol1Select.value;
     const startVal1 = col1 && isFinite(startPoint.values[col1]) ? `<br>${col1}: ${startPoint.values[col1].toFixed(4)}` : '';
     const endVal1   = col1 && isFinite(endPoint.values[col1])   ? `<br>${col1}: ${endPoint.values[col1].toFixed(4)}`   : '';
 
-    startMarker = L.marker([startPoint.lat, startPoint.lon], { icon: startIcon })
-        .bindPopup(`<b>Start Point</b><br>Time: ${startPoint.time.toISOString()}${startVal1}`)
-        .addTo(selectionMap);
+    const startIcon = L.divIcon({
+        className: 'selection-marker',
+        html: `<div style="width:15px;height:15px;background:#ffffff;border:2.5px solid green;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,0.25);"></div>`,
+        iconSize: [10, 10], iconAnchor: [5, 5]
+    });
+    const endIcon = L.divIcon({
+        className: 'selection-marker',
+        html: `<div style="width:15px;height:15px;background:#ffffff;border:2.5px solid red;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,0.25);"></div>`,
+        iconSize: [10, 10], iconAnchor: [5, 5]
+    });
 
-    endMarker = L.marker([endPoint.lat, endPoint.lon], { icon: endIcon })
-        .bindPopup(`<b>End Point</b><br>Time: ${endPoint.time.toISOString()}${endVal1}`)
-        .addTo(selectionMap);
+    const newStartMarker = L.marker([startPoint.lat, startPoint.lon], { icon: startIcon })
+        .bindPopup(`<b>Start</b><br>Time: ${startPoint.time.toISOString()}${startVal1}`);
+    const newEndMarker = L.marker([endPoint.lat, endPoint.lon], { icon: endIcon })
+        .bindPopup(`<b>End</b><br>Time: ${endPoint.time.toISOString()}${endVal1}`);
 
-    // Remove previous polylines
-    if (selectionPolylineOutline) { selectionMap.removeLayer(selectionPolylineOutline); selectionPolylineOutline = null; }
-    if (selectionPolyline)        { selectionMap.removeLayer(selectionPolyline);        selectionPolyline = null; }
-
-    // validGPSData is already sorted by time
     const pathCoords = validGPSData.map(d => [d.lat, d.lon]);
+    const newOutline = L.polyline(pathCoords, { color: '#000000', weight: 6, opacity: 0.45 });
+    const newLine    = L.polyline(pathCoords, { color: '#00d4ff', weight: 3, opacity: 0.9 });
 
-    if (pathCoords.length > 0) {
-        selectionPolylineOutline = L.polyline(pathCoords, {
-            color: '#000000',
-            weight: 6,
-            opacity: 0.45
-        }).addTo(selectionMap);
+    // All layers built successfully — now swap out the old ones
+    if (startMarker)             { selectionMap.removeLayer(startMarker);             startMarker             = null; }
+    if (endMarker)               { selectionMap.removeLayer(endMarker);               endMarker               = null; }
+    if (selectionPolylineOutline){ selectionMap.removeLayer(selectionPolylineOutline); selectionPolylineOutline = null; }
+    if (selectionPolyline)       { selectionMap.removeLayer(selectionPolyline);        selectionPolyline        = null; }
 
-        selectionPolyline = L.polyline(pathCoords, {
-            color: '#00d4ff',
-            weight: 3,
-            opacity: 0.9
-        }).addTo(selectionMap);
+    startMarker             = newStartMarker.addTo(selectionMap);
+    endMarker               = newEndMarker.addTo(selectionMap);
+    selectionPolylineOutline = newOutline.addTo(selectionMap);
+    selectionPolyline        = newLine.addTo(selectionMap);
 
-        try {
-            const polyBounds = selectionPolyline.getBounds();
-            if (polyBounds.isValid()) {
-                selectionMap.fitBounds(polyBounds, { padding: [50, 50] });
-            }
-        } catch (err) {
-            const bounds = L.latLngBounds([
-                [startPoint.lat, startPoint.lon],
-                [endPoint.lat, endPoint.lon]
-            ]);
-            selectionMap.fitBounds(bounds, { padding: [50, 50] });
+    try {
+        const polyBounds = selectionPolyline.getBounds();
+        if (polyBounds.isValid()) {
+            selectionMap.fitBounds(polyBounds, { padding: [50, 50] });
         }
+    } catch (err) {
+        selectionMap.fitBounds(
+            L.latLngBounds([[startPoint.lat, startPoint.lon], [endPoint.lat, endPoint.lon]]),
+            { padding: [50, 50] }
+        );
     }
 }
 
