@@ -924,8 +924,8 @@ function plotSelectionMap(data) {
     // Build all new layers before touching existing ones — if anything
     // throws during construction the old state remains intact
     const col1 = tsCol1Select.value;
-    const startVal1 = col1 && isFinite(startPoint.values[col1]) ? `<br>${col1}: ${startPoint.values[col1].toFixed(4)}` : '';
-    const endVal1   = col1 && isFinite(endPoint.values[col1])   ? `<br>${col1}: ${endPoint.values[col1].toFixed(4)}`   : '';
+    const startVal1 = col1 && Number.isFinite(startPoint.values[col1]) ? `<br>${col1}: ${startPoint.values[col1].toFixed(4)}` : '';
+    const endVal1   = col1 && Number.isFinite(endPoint.values[col1])   ? `<br>${col1}: ${endPoint.values[col1].toFixed(4)}`   : '';
 
     const startIcon = L.divIcon({
         className: 'selection-marker',
