@@ -195,10 +195,15 @@ function slopeOLS(x, y) {
 
 let ch4Map, ratioMap;
 let ch4Layer, ratioLayer;
+let ch4SelectLayer, ratioSelectLayer;
 let ch4Renderer, ratioRenderer;
+let ch4SelectRenderer, ratioSelectRenderer;
 let ch4ColorbarCtrl = null, ratioColorbarCtrl = null;
 let syncing = false;
 let speciesColumns = [];
+let currentPairs = [];
+let enhColorMin = 0, enhColorMax = 1;
+let ratioColorMin = 0, ratioColorMax = 1;
 
 function initMaps() {
     const center = [40.76, -111.89]; // SLV default
@@ -218,9 +223,14 @@ function initMaps() {
 
     ch4Renderer   = L.canvas({ padding: 0.5 });
     ratioRenderer = L.canvas({ padding: 0.5 });
+    ch4SelectRenderer   = L.canvas({ padding: 0.5 });
+    ratioSelectRenderer = L.canvas({ padding: 0.5 });
 
     ch4Layer   = L.featureGroup().addTo(ch4Map);
     ratioLayer = L.featureGroup().addTo(ratioMap);
+    // Selection layers sit on top of base layers
+    ch4SelectLayer   = L.featureGroup().addTo(ch4Map);
+    ratioSelectLayer = L.featureGroup().addTo(ratioMap);
 
     // Shared tile toggle — clicking either button switches both maps
     let isSatellite = true;
@@ -454,6 +464,10 @@ function renderMaps(pts) {
     const ratioMin = ratioVals.length ? percentile(ratioVals, 2)  : 0;
     const ratioMax = ratioVals.length ? percentile(ratioVals, 98) : 1;
 
+    // Store globally so scatter selection can use the same color mapping
+    enhColorMin = enhMin; enhColorMax = enhMax;
+    ratioColorMin = ratioMin; ratioColorMax = ratioMax;
+
     ch4Layer.clearLayers();
     ratioLayer.clearLayers();
 
@@ -516,6 +530,8 @@ function renderScatter(pts, ch4Col, c2h6Col) {
     const pairs = pts
         .filter((_, i) => i % STRIDE === 0)
         .filter(p => Number.isFinite(p.enh) && p.enh > 0 && Number.isFinite(p.c2h6enh));
+
+    currentPairs = pairs; // expose for cross-plot selection
 
     if (!pairs.length) return;
 
@@ -629,6 +645,7 @@ function renderScatter(pts, ch4Col, c2h6Col) {
         plot_bgcolor: '#020617',
         font: { color: '#e5e7eb' },
         margin: { l: 65, r: 20, t: 20, b: 55 },
+        dragmode: 'select',
         xaxis: {
             title: { text: 'ΔCH4 (ppm)', font: { color: '#9ca3af' } },
             tickfont: { color: '#9ca3af' },
@@ -655,6 +672,38 @@ function renderScatter(pts, ch4Col, c2h6Col) {
             { type: 'line', xref: 'x', yref: 'y', x0: 0, y0: 0, x1: xMax, y1: S3*xMax, line: { color: 'rgba(255,255,255,0.18)', width: 1 } },
         ]
     }, { responsive: true });
+
+    const scatterEl = document.getElementById('scatterPlot');
+    scatterEl.on('plotly_selected', onScatterSelected);
+    scatterEl.on('plotly_deselect', clearMapSelection);
+}
+
+// ── Cross-plot selection ───────────────────────────────────────────────────────
+
+function onScatterSelected(e) {
+    ch4SelectLayer.clearLayers();
+    ratioSelectLayer.clearLayers();
+    if (!e || !e.points.length) return;
+
+    e.points.forEach(p => {
+        const pt = currentPairs[p.pointIndex];
+        if (!pt || !Number.isFinite(pt.lat) || !Number.isFinite(pt.lon)) return;
+        if (Math.abs(pt.lat) < 1 || Math.abs(pt.lon) < 1) return;
+
+        const enhT   = enhColorMax > enhColorMin
+            ? Math.max(0, Math.min(1, (pt.enh   - enhColorMin)   / (enhColorMax   - enhColorMin)))   : 0;
+        const ratioT = ratioColorMax > ratioColorMin && Number.isFinite(pt.ratio)
+            ? Math.max(0, Math.min(1, (pt.ratio - ratioColorMin) / (ratioColorMax - ratioColorMin))) : 0;
+
+        const base = { radius: 5, weight: 1.5, color: '#ffffff', fillOpacity: 1 };
+        L.circleMarker([pt.lat, pt.lon], { ...base, fillColor: plasmaColor(enhT),  renderer: ch4SelectRenderer   }).addTo(ch4SelectLayer);
+        L.circleMarker([pt.lat, pt.lon], { ...base, fillColor: ratioColor(ratioT), renderer: ratioSelectRenderer }).addTo(ratioSelectLayer);
+    });
+}
+
+function clearMapSelection() {
+    ch4SelectLayer.clearLayers();
+    ratioSelectLayer.clearLayers();
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
