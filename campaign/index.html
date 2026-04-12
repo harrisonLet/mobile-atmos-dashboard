@@ -471,12 +471,17 @@ function renderMaps(pts) {
     ch4Layer.clearLayers();
     ratioLayer.clearLayers();
 
-    for (let i = 0; i < pts.length; i += STRIDE) {
+    // Stride over each metric's valid points independently so that alternating-NaN
+    // instruments (e.g. 0.5 Hz Picarro in a 1 Hz merged dataset) don't create
+    // geographic blind spots when the global stride index happens to align with
+    // the NaN rows for an entire drive segment.
+    let enhCount = 0, ratioCount = 0;
+    for (let i = 0; i < pts.length; i++) {
         const p = pts[i];
         if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon)) continue;
         if (Math.abs(p.lat) < 1 || Math.abs(p.lon) < 1) continue;
 
-        if (Number.isFinite(p.enh)) {
+        if (Number.isFinite(p.enh) && enhCount++ % STRIDE === 0) {
             const t = enhMax > enhMin ? (p.enh - enhMin) / (enhMax - enhMin) : 0;
             L.circleMarker([p.lat, p.lon], {
                 radius: 3, weight: 0,
@@ -486,7 +491,7 @@ function renderMaps(pts) {
             }).addTo(ch4Layer);
         }
 
-        if (Number.isFinite(p.ratio) && p.ratio > 0) {
+        if (Number.isFinite(p.ratio) && p.ratio > 0 && ratioCount++ % STRIDE === 0) {
             const t = ratioMax > ratioMin ? (p.ratio - ratioMin) / (ratioMax - ratioMin) : 0;
             L.circleMarker([p.lat, p.lon], {
                 radius: 3, weight: 0,
